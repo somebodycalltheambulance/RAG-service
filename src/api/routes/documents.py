@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.session import get_session
 from src.models import Document, Chunk
 from src.services.document_service import split_text
+from src.services.embedding_service import get_embeddings
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -31,13 +32,15 @@ async def upload_document(
     session.add(document)
 
     chunks = split_text(text)
-    for i, chunk_text in enumerate(chunks):
+    embeddings = get_embeddings(chunks)
+
+    for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
         chunk = Chunk(
             id=uuid.uuid4(),
             document_id=document.id,
             content=chunk_text,
             chunk_index=i,
-            embedding=[0.0] * 384,
+            embedding=embedding,
         )
         session.add(chunk)
 
