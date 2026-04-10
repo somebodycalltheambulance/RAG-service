@@ -1,4 +1,7 @@
 import uuid
+import pytesseract
+from PIL import Image
+import io
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.session import get_session
@@ -14,18 +17,21 @@ async def upload_document(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
 ):
-    # Принимаем только текстовые файлы и PDF
-    if file.content_type not in ("text/plain", "application/pdf"):
-        raise HTTPException(status_code=400, detail="Только TXT и PDF файлы")
+    # Принимаем TXT, PDF и изображения
+    if file.content_type not in ("text/plain", "application/pdf", "image/jpeg", "image/png", "image/jpg", "image/webp"):
+        raise HTTPException(status_code=400, detail="Поддерживаются TXT, PDF и изображения (JPG, PNG)")
 
-    # Читаем содержимое файла в байтах
     content = await file.read()
 
-    # Декодируем текст из байтов
     if file.content_type == "text/plain":
         text = content.decode("utf-8")
+    elif file.content_type in ("image/jpeg", "image/png", "image/jpg", "image/webp"):
+        # Открываем изображение и распознаём текст через OCR
+        image = Image.open(io.BytesIO(content))
+        text = pytesseract.image_to_string(image, lang="rus+eng")
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Текст на изображении не распознан")
     else:
-        # PDF-парсинг будет добавлен позже
         raise HTTPException(status_code=400, detail="PDF пока не поддерживается")
 
     # Создаём запись документа в БД
