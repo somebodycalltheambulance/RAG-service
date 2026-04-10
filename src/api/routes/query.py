@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.session import get_session
 from src.services.embedding_service import get_embedding
 from src.services.llm_service import generate_answer
+from src.services.cache_service import get_cached, set_cached
 
 router = APIRouter(prefix="/query", tags=["query"])
 
@@ -19,8 +20,16 @@ async def query(
     request: QueryRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    question_embedding = get_embedding(request.question)
+    cached = await get_cached(request.question)
+    if cached:
+        return {
+            "question": request.question,
+            "answer": cached,
+            "chunks_used": 0,
+            "cached": True,
+        }
 
+    question_embedding = get_embedding(request.question)
     embedding_str = "[" + ",".join(map(str, question_embedding)) + "]"
 
     result = await session.execute(
@@ -41,11 +50,13 @@ async def query(
         raise HTTPException(status_code=404, detail="Документы не найдены")
 
     context = "\n\n".join([row[0] for row in chunks])
-
     answer = await generate_answer(request.question, context)
+
+    await set_cached(request.question, answer)
 
     return {
         "question": request.question,
         "answer": answer,
         "chunks_used": len(chunks),
+        "cached": False,
     }
