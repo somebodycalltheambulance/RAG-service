@@ -58,3 +58,20 @@ async def upload_document(
         "filename": file.filename,
         "chunks_count": len(chunks),
     }
+    
+@router.delete("/{document_id}")
+async def delete_document(
+    document_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    # Ищем документ по ID
+    document = await session.get(Document, uuid.UUID(document_id))
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+
+    # Удаляем документ — чанки удалятся каскадно
+    await session.delete(document)
+    await session.commit()
+
+    return {"deleted": document_id}
