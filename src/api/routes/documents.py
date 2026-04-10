@@ -14,16 +14,21 @@ async def upload_document(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
 ):
+    # Принимаем только текстовые файлы и PDF
     if file.content_type not in ("text/plain", "application/pdf"):
         raise HTTPException(status_code=400, detail="Только TXT и PDF файлы")
 
+    # Читаем содержимое файла в байтах
     content = await file.read()
 
+    # Декодируем текст из байтов
     if file.content_type == "text/plain":
         text = content.decode("utf-8")
     else:
+        # PDF-парсинг будет добавлен позже
         raise HTTPException(status_code=400, detail="PDF пока не поддерживается")
 
+    # Создаём запись документа в БД
     document = Document(
         id=uuid.uuid4(),
         filename=file.filename,
@@ -31,9 +36,11 @@ async def upload_document(
     )
     session.add(document)
 
+    # Нарезаем текст на чанки и генерируем эмбеддинги для всех сразу
     chunks = split_text(text)
     embeddings = get_embeddings(chunks)
 
+    # Сохраняем каждый чанк с его эмбеддингом
     for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
         chunk = Chunk(
             id=uuid.uuid4(),
