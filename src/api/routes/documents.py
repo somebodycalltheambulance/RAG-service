@@ -1,7 +1,8 @@
 import uuid
-import pytesseract
-from PIL import Image
 import io
+import pytesseract
+import PyPDF2
+from PIL import Image
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.session import get_session
@@ -11,28 +12,46 @@ from src.services.embedding_service import get_embeddings
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
+# Поддерживаемые форматы файлов
+SUPPORTED_TYPES = (
+    "text/plain",
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+)
+
 
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
 ):
-    # Принимаем TXT, PDF и изображения
-    if file.content_type not in ("text/plain", "application/pdf", "image/jpeg", "image/png", "image/jpg", "image/webp"):
+    if file.content_type not in SUPPORTED_TYPES:
         raise HTTPException(status_code=400, detail="Поддерживаются TXT, PDF и изображения (JPG, PNG)")
 
     content = await file.read()
 
     if file.content_type == "text/plain":
+        # Декодируем текстовый файл из байтов
         text = content.decode("utf-8")
-    elif file.content_type in ("image/jpeg", "image/png", "image/jpg", "image/webp"):
-        # Открываем изображение и распознаём текст через OCR
+
+    elif file.content_type == "application/pdf":
+        # Извлекаем текст со всех страниц PDF
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() or ""
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Текст в PDF не найден")
+
+    else:
+        # Распознаём текст с изображения через OCR
         image = Image.open(io.BytesIO(content))
         text = pytesseract.image_to_string(image, lang="rus+eng")
         if not text.strip():
             raise HTTPException(status_code=400, detail="Текст на изображении не распознан")
-    else:
-        raise HTTPException(status_code=400, detail="PDF пока не поддерживается")
 
     # Создаём запись документа в БД
     document = Document(
@@ -64,7 +83,8 @@ async def upload_document(
         "filename": file.filename,
         "chunks_count": len(chunks),
     }
-    
+
+
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: str,
