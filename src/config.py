@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
 
-    # Gemini
-    gemini_api_key: str = ""
+    # Groq
+    groq_api_key: str = ""
+    groq_proxy: str = "socks5://127.0.0.1:1080"
 
     # App
     app_host: str = "0.0.0.0"
