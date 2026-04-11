@@ -23,7 +23,7 @@ async def query(
     session: AsyncSession = Depends(get_session),
 ):
     # Проверяем кеш — ключ включает document_id если указан
-    cache_key = request.question + (request.document_id or "")
+    cache_key = request.question + "|" + (request.document_id or "")
     cached = await get_cached(cache_key)
     if cached:
         return {
@@ -33,34 +33,34 @@ async def query(
             "cached": True,
         }
 
-    question_embedding = get_embedding(request.question)
+    question_embedding = await get_embedding(request.question)
     embedding_str = "[" + ",".join(map(str, question_embedding)) + "]"
 
     # Если указан document_id — ищем только по его чанкам
     if request.document_id:
         result = await session.execute(
             text(
-                f"""
+                """
                 SELECT content
                 FROM chunks
                 WHERE document_id = :document_id
-                ORDER BY embedding <=> '{embedding_str}'::vector
+                ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top_k
                 """
             ),
-            {"top_k": request.top_k, "document_id": request.document_id},
+            {"top_k": request.top_k, "document_id": request.document_id, "embedding": embedding_str},
         )
     else:
         result = await session.execute(
             text(
-                f"""
+                """
                 SELECT content
                 FROM chunks
-                ORDER BY embedding <=> '{embedding_str}'::vector
+                ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top_k
                 """
             ),
-            {"top_k": request.top_k},
+            {"top_k": request.top_k, "embedding": embedding_str},
         )
 
     chunks = result.fetchall()

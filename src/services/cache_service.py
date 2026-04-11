@@ -6,8 +6,9 @@ from src.config import settings
 redis = Redis.from_url(settings.redis_url)
 
 
-def _make_key(question: str) -> str:
-    return "query:" + hashlib.md5(question.encode()).hexdigest()
+def _make_key(raw: str) -> str:
+    normalized = raw.strip().lower()
+    return "query:" + hashlib.md5(normalized.encode()).hexdigest()
 
 
 async def get_cached(question: str) -> str | None:

@@ -1,9 +1,11 @@
+import hashlib
 import uuid
 import io
 import pytesseract
 import PyPDF2
 from PIL import Image
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.session import get_session
 from src.models import Document, Chunk
@@ -11,6 +13,19 @@ from src.services.document_service import split_text
 from src.services.embedding_service import get_embeddings
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+@router.get("/")
+async def list_documents(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(
+        select(Document.id, Document.filename, Document.created_at)
+    )
+    docs = result.fetchall()
+    return [
+        {"document_id": str(d.id), "filename": d.filename, "created_at": d.created_at}
+        for d in docs
+    ]
+
 
 # Поддерживаемые форматы файлов
 SUPPORTED_TYPES = (
@@ -53,17 +68,27 @@ async def upload_document(
         if not text.strip():
             raise HTTPException(status_code=400, detail="Текст на изображении не распознан")
 
+    content_hash = hashlib.sha256(text.encode()).hexdigest()
+
+    # Проверяем, не загружен ли уже такой документ
+    existing = await session.execute(
+        select(Document).where(Document.content_hash == content_hash)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Документ с таким содержимым уже загружен")
+
     # Создаём запись документа в БД
     document = Document(
         id=uuid.uuid4(),
         filename=file.filename,
         content=text,
+        content_hash=content_hash,
     )
     session.add(document)
 
     # Нарезаем текст на чанки и генерируем эмбеддинги для всех сразу
     chunks = split_text(text)
-    embeddings = get_embeddings(chunks)
+    embeddings = await get_embeddings(chunks)
 
     # Сохраняем каждый чанк с его эмбеддингом
     for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):

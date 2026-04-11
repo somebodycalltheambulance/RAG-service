@@ -2,9 +2,11 @@ import httpx
 from groq import AsyncGroq
 from src.config import settings
 
+_http_client = httpx.AsyncClient(proxy=settings.groq_proxy) if settings.groq_proxy else None
+
 client = AsyncGroq(
     api_key=settings.groq_api_key,
-    http_client=httpx.AsyncClient(proxy=settings.groq_proxy),
+    http_client=_http_client,
 )
 
 

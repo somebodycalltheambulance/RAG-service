@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Groq
     groq_api_key: str = ""
-    groq_proxy: str = "socks5://127.0.0.1:1080"
+    groq_proxy: str = ""
 
     # App
     app_host: str = "0.0.0.0"

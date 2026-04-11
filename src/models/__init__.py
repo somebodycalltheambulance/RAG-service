@@ -19,6 +19,7 @@ class Document(Base):
     )
     filename: Mapped[str] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
     )
